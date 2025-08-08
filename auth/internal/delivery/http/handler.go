@@ -5,6 +5,7 @@ import (
 	"auth/internal/usecase"
 	"encoding/json"
 	"github.com/gorilla/mux"
+	"log"
 	"net/http"
 )
 
@@ -78,6 +79,8 @@ func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		// Log the request decoding error
+		log.Printf("WARN: failed to decode request body: %v", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
@@ -86,6 +89,10 @@ func (h *AuthHandler) register(w http.ResponseWriter, r *http.Request) {
 
 	user, token, err := h.useCase.Register(r.Context(), req.Name, req.Email, req.Password, req.Role)
 	if err != nil {
+		// The use case has already logged the specific error,
+		// this log confirms the handler received an error.
+		log.Printf("ERROR: registration failed for email %s: %v", req.Email, err)
+		// Here you could check for specific error types, e.g., duplicate email
 		http.Error(w, "Could not create user", http.StatusInternalServerError)
 		return
 	}

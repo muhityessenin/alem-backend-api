@@ -10,19 +10,23 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"log"
 	"net/http"
+	"os"
 	delivery "tutor/internal/delivery/http"
 	"tutor/internal/repository"
 	"tutor/internal/usecase"
 )
 
 func main() {
-
-	dbConnStr := "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a.oregon-postgres.render.com/alem_db?sslmode=disable"
-	port := 8083
-	jwtSecret := "EACBXCIVYXWYFJKMWNEJWUIHQVISPJZWQATTIXDTJPWSNOAIOOJHLLQFMGDXGWNO"
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found")
+	}
+	dbConnStr := os.Getenv("DATABASE_URL")
+	port := os.Getenv("PORT")
+	jwtSecret := os.Getenv("JWT_SECRET")
 
 	// log.Println("Running database migrations...")
 	// err := runMigrations(dbConnStr)
@@ -47,8 +51,8 @@ func main() {
 	router := mux.NewRouter()
 	tutorHandler.RegisterRoutes(router)
 
-	log.Printf("Tutor service starting on port %d", port)
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), router); err != nil {
+	log.Printf("Tutor service starting on port %s", port)
+	if err := http.ListenAndServe(fmt.Sprintf(":%s", port), router); err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}
 }

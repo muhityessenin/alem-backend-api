@@ -8,8 +8,10 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/joho/godotenv"
 	"log"
 	"net/http"
+	"os"
 
 	delivery "user/internal/delivery/http"
 	"user/internal/repository"
@@ -21,8 +23,11 @@ import (
 )
 
 func main() {
-	dbConnStr := "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a.oregon-postgres.render.com/alem_db?sslmode=disable"
-	jwtSecret := "EACBXCIVYXWYFJKMWNEJWUIHQVISPJZWQATTIXDTJPWSNOAIOOJHLLQFMGDXGWNO"
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found")
+	}
+	dbConnStr := os.Getenv("DATABASE_URL")
+	jwtSecret := os.Getenv("JWT_SECRET")
 	// log.Println("Running database migrations for user service...")
 	// if err := runMigrations(dbConnStr); err != nil {
 	//	log.Fatalf("Could not run database migrations: %v", err)
@@ -46,35 +51,30 @@ func main() {
 
 	userHandler.RegisterRoutes(router)
 
-	port := 8082
-	log.Printf("User service starting on port %d", port)
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), router); err != nil {
+	port := os.Getenv("PORT")
+	log.Printf("User service starting on port %s", port)
+	if err := http.ListenAndServe(fmt.Sprintf(":%s", port), router); err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}
 }
 
-// Add this function to the bottom of main.go
 func runMigrations(dbURL string) error {
-	// Open a standard database connection for the migration.
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		return fmt.Errorf("could not open db connection for migration: %w", err)
 	}
 	defer db.Close()
 
-	// Create a new driver instance with the connection.
 	driver, err := postgres.WithInstance(db, &postgres.Config{})
 	if err != nil {
 		return fmt.Errorf("could not create postgres driver for migration: %w", err)
 	}
 
-	// Create a new migrate instance.
 	m, err := migrate.NewWithDatabaseInstance("file://migrations", "postgres", driver)
 	if err != nil {
 		return fmt.Errorf("could not create migrate instance: %w", err)
 	}
 
-	// Run the migrations.
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("could not apply migrations: %w", err)
 	}

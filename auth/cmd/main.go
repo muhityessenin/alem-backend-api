@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/joho/godotenv"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	delivery "auth/internal/delivery/http"
@@ -16,9 +18,11 @@ import (
 )
 
 func main() {
-	// TODO: Загружать из .env или флагов
-	dbConnStr := "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a.oregon-postgres.render.com/alem_db?sslmode=disable"
-	jwtSecret := "EACBXCIVYXWYFJKMWNEJWUIHQVISPJZWQATTIXDTJPWSNOAIOOJHLLQFMGDXGWNO"
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found")
+	}
+	dbConnStr := os.Getenv("DATABASE_URL")
+	jwtSecret := os.Getenv("JWT_SECRET")
 	accessTokenTTL := 15 * time.Minute
 	refreshTokenTTL := 24 * time.Hour * 30
 
@@ -38,9 +42,9 @@ func main() {
 	router := mux.NewRouter()
 	authHandler.RegisterRoutes(router)
 
-	port := 8081
-	log.Printf("Auth service starting on port %d", port)
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), router); err != nil {
+	port := os.Getenv("PORT")
+	log.Printf("Auth service starting on port %s", port)
+	if err := http.ListenAndServe(fmt.Sprintf(":%s", port), router); err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}
 }

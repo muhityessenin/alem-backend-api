@@ -10,6 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
+	"log"
 	"time"
 )
 
@@ -92,7 +93,9 @@ func (uc *authUseCase) generateToken(userID string, role domain.Role, ttl time.D
 func (uc *authUseCase) Register(ctx context.Context, name, email, password string, role domain.Role) (*domain.User, string, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, "", err
+		// Log the error
+		log.Printf("ERROR: failed to hash password: %v", err)
+		return nil, "", fmt.Errorf("usecase.Register: failed to hash password: %w", err)
 	}
 
 	user := &domain.User{
@@ -106,12 +109,18 @@ func (uc *authUseCase) Register(ctx context.Context, name, email, password strin
 	}
 
 	if err := uc.userRepo.Create(ctx, user); err != nil {
+		// The repository already logged the specific DB error,
+		// here we log that the use case failed at this step.
+		log.Printf("ERROR: usecase.Register failed to create user for email %s: %v", email, err)
+		// The original error is already wrapped, so we can just return it.
 		return nil, "", err
 	}
 
 	accessToken, err := uc.generateToken(user.ID, user.Role, uc.accessTokenTTL)
 	if err != nil {
-		return nil, "", err
+		// Log the error
+		log.Printf("ERROR: failed to generate token for user %s: %v", user.ID, err)
+		return nil, "", fmt.Errorf("usecase.Register: failed to generate token: %w", err)
 	}
 
 	return user, accessToken, nil
