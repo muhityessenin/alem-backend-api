@@ -1,0 +1,51 @@
+services:
+  - type: web
+    name: auth-service
+    env: docker
+    dockerfilePath: ./auth/Dockerfile
+    dockerContext: ./auth
+    autoDeploy: true
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      # Перенеси значения из ./auth/.env в эти переменные (или оформи Env Var Group)
+      - key: PORT
+        value: "8080"
+      - key: JWT_SECRET
+        value: "EACBXCIVYXWYFJKMWNEJWUIHQVISPJZWQATTIXDTJPWSNOAIOOJHLLQFMGDXGWNO"
+      - key: DB_URL
+        value: "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a/alem_db"
+
+  - type: web
+    name: user-service
+    env: docker
+    dockerfilePath: ./user/Dockerfile
+    dockerContext: ./user
+    autoDeploy: true
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: JWT_SECRET
+        value: "EACBXCIVYXWYFJKMWNEJWUIHQVISPJZWQATTIXDTJPWSNOAIOOJHLLQFMGDXGWNO"
+      - key: DB_URL
+        value: "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a/alem_db"
+
+
+  - type: web
+    name: tutor-service
+    env: docker
+    dockerfilePath: ./tutor/Dockerfile
+    dockerContext: ./tutor
+    autoDeploy: true
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: JWT_SECRET
+        value: "EACBXCIVYXWYFJKMWNEJWUIHQVISPJZWQATTIXDTJPWSNOAIOOJHLLQFMGDXGWNO"
+      - key: DB_URL
+        value: "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a/alem_db"
+
