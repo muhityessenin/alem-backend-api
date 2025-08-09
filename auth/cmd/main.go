@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/joho/godotenv"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
+	"auth/internal/config"
 	delivery "auth/internal/delivery/http"
 	"auth/internal/repository"
 	"auth/internal/usecase"
@@ -19,43 +21,89 @@ import (
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found")
-	}
-	dbConnStr := os.Getenv("DB_URL")
-	if dbConnStr == "" {
-		log.Fatal("DATABASE_URL is not set")
-	}
-	jwtSecret := os.Getenv("JWT_SECRET")
-	accessTokenTTL := 15 * time.Minute
-	refreshTokenTTL := 24 * time.Hour * 30
+	cfg := config.MustLoad()
 
-	dbpool, err := pgxpool.New(context.Background(), dbConnStr)
+	// DB pool
+	pgxCfg, err := pgxpool.ParseConfig(cfg.DB.URL)
 	if err != nil {
-		log.Fatalf("Unable to connect to database: %v\n", err)
+		log.Fatalf("parse db url: %v", err)
+	}
+	pgxCfg.MaxConns = cfg.DB.MaxConns
+	pgxCfg.MinConns = cfg.DB.MinConns
+	pgxCfg.MaxConnLifetime = cfg.DB.MaxConnLifetime
+	pgxCfg.MaxConnIdleTime = cfg.DB.MaxConnIdleTime
+
+	dbctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	dbpool, err := pgxpool.NewWithConfig(dbctx, pgxCfg)
+	if err != nil {
+		log.Fatalf("connect db: %v", err)
 	}
 	defer dbpool.Close()
 
+	// ...
 	userRepo := repository.NewUserPostgresRepo(dbpool)
+	sessRepo := repository.NewSessionsRepo(dbpool)
+	otpRepo := repository.NewOTPRepo(dbpool)
 
-	authUseCase := usecase.NewAuthUseCase(userRepo, jwtSecret, accessTokenTTL, refreshTokenTTL)
-
-	authHandler := delivery.NewAuthHandler(authUseCase)
-
-	router := mux.NewRouter()
-	authHandler.RegisterRoutes(router)
-
-	// CORS настройки
-	corsHandler := handlers.CORS(
-		handlers.AllowedOrigins([]string{"*"}), // Разрешить все источники (лучше ограничить)
-		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
-		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
+	authUC := usecase.NewAuthUseCase(
+		userRepo,
+		sessRepo,
+		otpRepo,
+		usecase.Config{
+			AccessSecret:   cfg.JWT.AccessSecret,
+			RefreshSecret:  cfg.JWT.RefreshSecret,
+			Issuer:         cfg.JWT.Issuer,
+			Audience:       cfg.JWT.Audience,
+			AccessTTL:      cfg.JWT.AccessTTL,
+			RefreshTTL:     cfg.JWT.RefreshTTL,
+			OTPEnabled:     cfg.OTP.Enabled,
+			OTPTTL:         cfg.OTP.TTL,
+			OTPLength:      cfg.OTP.Length,
+			MaxOTPAttempts: 5,
+		},
 	)
 
-	port := os.Getenv("PORT")
-	log.Printf("Auth service starting on port %s", port)
+	// http
+	router := mux.NewRouter()
+	authHandler := delivery.NewAuthHandler(authUC)
+	authHandler.RegisterRoutes(router)
 
-	if err := http.ListenAndServe(fmt.Sprintf(":%s", port), corsHandler(router)); err != nil {
-		log.Fatalf("failed to start server: %v", err)
+	cors := handlers.CORS(
+		handlers.AllowedOrigins(cfg.CORS.AllowedOrigins),
+		handlers.AllowedMethods(cfg.CORS.AllowedMethods),
+		handlers.AllowedHeaders(cfg.CORS.AllowedHeaders),
+	)
+
+	srv := &http.Server{
+		Addr:         fmt.Sprintf("%s:%d", cfg.App.Host, cfg.App.Port),
+		Handler:      cors(router),
+		ReadTimeout:  cfg.App.ReadTimeout,
+		WriteTimeout: cfg.App.WriteTimeout,
+		IdleTimeout:  cfg.App.IdleTimeout,
+	}
+
+	// graceful shutdown
+	errCh := make(chan error, 1)
+	go func() {
+		log.Printf("%s starting on %s", cfg.App.Name, srv.Addr)
+		errCh <- srv.ListenAndServe()
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case sig := <-quit:
+		log.Printf("shutdown signal: %s", sig.String())
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Printf("server shutdown error: %v", err)
+		}
+	case err := <-errCh:
+		if err != nil && err != http.ErrServerClosed {
+			log.Fatalf("server error: %v", err)
+		}
 	}
 }

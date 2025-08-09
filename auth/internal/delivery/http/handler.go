@@ -4,139 +4,190 @@ import (
 	"auth/internal/domain"
 	"auth/internal/usecase"
 	"encoding/json"
-	"github.com/gorilla/mux"
-	"log"
+	"net"
 	"net/http"
+
+	"github.com/gorilla/mux"
 )
 
 type AuthHandler struct {
 	useCase usecase.AuthUseCase
 }
 
-func NewAuthHandler(uc usecase.AuthUseCase) *AuthHandler {
-	return &AuthHandler{useCase: uc}
-}
-
-type refreshRequest struct {
-	RefreshToken string `json:"refreshToken"`
-}
-
-func (h *AuthHandler) RegisterRoutes(router *mux.Router) {
-	// Открытые роуты
-	router.HandleFunc("/api/auth/register", h.register).Methods("POST")
-	router.HandleFunc("/api/auth/login", h.login).Methods("POST")
-	router.HandleFunc("/api/auth/refresh", h.refresh).Methods("POST")
-
-	// Группа защищенных роутов
-	protected := router.PathPrefix("/api/auth").Subrouter()
-	protected.Use(h.JWTMiddleware) // Применяем middleware ко всей группе
-	protected.HandleFunc("/logout", h.logout).Methods("POST")
-}
+func NewAuthHandler(uc usecase.AuthUseCase) *AuthHandler { return &AuthHandler{useCase: uc} }
 
 type registerRequest struct {
-	Email    string      `json:"email"`
-	Password string      `json:"password"`
-	Name     string      `json:"name"`
-	Role     domain.Role `json:"role"`
+	FirstName string      `json:"firstName"`
+	LastName  string      `json:"lastName"`
+	Email     string      `json:"email"`
+	Phone     string      `json:"phone"`
+	Password  string      `json:"password"`
+	Role      domain.Role `json:"role"`
 }
 type loginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
+type refreshRequest struct {
+	RefreshToken string `json:"refreshToken"`
+}
+type otpSendRequest struct {
+	Phone string `json:"phone"`
+}
+type otpVerifyRequest struct {
+	Phone string `json:"phone"`
+	Code  string `json:"code"`
+}
 
-type loginResponse struct {
-	Success bool `json:"success"`
-	Data    struct {
-		AccessToken  string `json:"token"`
-		RefreshToken string `json:"refreshToken"`
-	} `json:"data"`
+type tokenResponse struct {
+	AccessToken  string `json:"token"`
+	RefreshToken string `json:"refreshToken"`
+}
+
+func (h *AuthHandler) RegisterRoutes(router *mux.Router) {
+	router.HandleFunc("/api/auth/register", h.register).Methods("POST")
+	router.HandleFunc("/api/auth/login", h.login).Methods("POST")
+	router.HandleFunc("/api/auth/refresh", h.refresh).Methods("POST")
+	router.HandleFunc("/api/auth/otp/send", h.sendOTP).Methods("POST")
+	router.HandleFunc("/api/auth/otp/verify", h.verifyOTP).Methods("POST")
+
+	protected := router.PathPrefix("/api/auth").Subrouter()
+	protected.Use(h.JWTMiddleware)
+	protected.HandleFunc("/logout", h.logout).Methods("POST")
+	protected.HandleFunc("/logout-all", h.logoutAll).Methods("POST")
+}
+
+func (h *AuthHandler) register(w http.ResponseWriter, r *http.Request) {
+	var req registerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
+		return
+	}
+	if req.Email == "" || req.Password == "" {
+		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "email and password are required")
+		return
+	}
+	if req.Role == "" {
+		req.Role = domain.StudentRole
+	}
+	user, pair, err := h.useCase.Register(r.Context(), req.FirstName, req.LastName, req.Email, req.Phone, req.Password, req.Role)
+	if err != nil {
+		writeErr(w, http.StatusConflict, "REGISTER_FAILED", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"success": true,
+		"data": map[string]any{
+			"user":  user,
+			"token": tokenResponse{AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken},
+		},
+	})
 }
 
 func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		writeErr(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
-
-	accessToken, refreshToken, err := h.useCase.Login(r.Context(), req.Email, req.Password)
+	ua := r.UserAgent()
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	pair, err := h.useCase.Login(r.Context(), req.Email, req.Password, ua, ip)
 	if err != nil {
-		// Здесь можно добавить более детальную обработку ошибок из usecase
-		// например, usecase.ErrUserNotFound -> http.StatusNotFound
-		http.Error(w, `{"success": false, "error": {"code": "UNAUTHORIZED", "message": "Invalid credentials"}}`, http.StatusUnauthorized)
+		writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid credentials")
 		return
 	}
-
-	response := loginResponse{
-		Success: true,
-	}
-	response.Data.AccessToken = accessToken
-	response.Data.RefreshToken = refreshToken
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-func (h *AuthHandler) register(w http.ResponseWriter, r *http.Request) {
-	var req registerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		// Log the request decoding error
-		log.Printf("WARN: failed to decode request body: %v", err)
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	// Здесь нужна валидация, добавим позже
-
-	user, token, err := h.useCase.Register(r.Context(), req.Name, req.Email, req.Password, req.Role)
-	if err != nil {
-		// The use case has already logged the specific error,
-		// this log confirms the handler received an error.
-		log.Printf("ERROR: registration failed for email %s: %v", req.Email, err)
-		// Here you could check for specific error types, e.g., duplicate email
-		http.Error(w, "Could not create user", http.StatusInternalServerError)
-		return
-	}
-
-	response := map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
-		"data": map[string]interface{}{
-			"user":  user,
-			"token": token,
-		},
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(response)
+		"data":    tokenResponse{AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken},
+	})
 }
 
 func (h *AuthHandler) refresh(w http.ResponseWriter, r *http.Request) {
 	var req refreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		writeErr(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
+	ua := r.UserAgent()
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
 
-	accessToken, refreshToken, err := h.useCase.RefreshTokens(r.Context(), req.RefreshToken)
+	pair, err := h.useCase.RefreshTokens(r.Context(), req.RefreshToken, ua, ip)
 	if err != nil {
-		http.Error(w, `{"success": false, "error": {"code": "UNAUTHORIZED", "message": "Invalid refresh token"}}`, http.StatusUnauthorized)
+		writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid refresh token")
 		return
 	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data":    tokenResponse{AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken},
+	})
+}
 
-	response := loginResponse{Success: true}
-	response.Data.AccessToken = accessToken
-	response.Data.RefreshToken = refreshToken
+func (h *AuthHandler) sendOTP(w http.ResponseWriter, r *http.Request) {
+	var req otpSendRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Phone == "" {
+		writeErr(w, http.StatusBadRequest, "INVALID_BODY", "phone required")
+		return
+	}
+	// На MVP это можно no-op, но метод готов
+	if err := h.useCase.SendOTP(r.Context(), req.Phone); err != nil {
+		writeErr(w, http.StatusInternalServerError, "OTP_SEND_FAILED", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+func (h *AuthHandler) verifyOTP(w http.ResponseWriter, r *http.Request) {
+	var req otpVerifyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Phone == "" || req.Code == "" {
+		writeErr(w, http.StatusBadRequest, "INVALID_BODY", "phone and code are required")
+		return
+	}
+	ua := r.UserAgent()
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	pair, err := h.useCase.VerifyOTP(r.Context(), req.Phone, req.Code, ua, ip)
+	if err != nil {
+		writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid OTP")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data":    tokenResponse{AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken},
+	})
 }
 
 func (h *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
-	// В stateless-архитектуре с JWT, реальный выход происходит на клиенте
-	// путем удаления токенов. Сервер просто подтверждает операцию.
-	// userID, _ := r.Context().Value(UserIDKey).(string) // Можем получить ID, если нужно
+	var req refreshRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RefreshToken == "" {
+		writeErr(w, http.StatusBadRequest, "INVALID_BODY", "refreshToken required")
+		return
+	}
+	if err := h.useCase.Logout(r.Context(), req.RefreshToken); err != nil {
+		writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid refresh token")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Logged out"})
+}
 
+func (h *AuthHandler) logoutAll(w http.ResponseWriter, r *http.Request) {
+	userID, _ := r.Context().Value(UserIDKey).(string)
+	_ = h.useCase.LogoutAll(r.Context(), userID)
+	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
+func writeErr(w http.ResponseWriter, code int, errCode, msg string) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"success": true, "message": "Logged out successfully"}`))
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"success": false,
+		"error": map[string]string{
+			"code":    errCode,
+			"message": msg,
+		},
+	})
+}
+func writeJSON(w http.ResponseWriter, code int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(v)
 }
