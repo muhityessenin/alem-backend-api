@@ -22,7 +22,10 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found")
 	}
-	dbConnStr := os.Getenv("DATABASE_URL")
+	dbConnStr := os.Getenv("DB_URL")
+	if dbConnStr == "" {
+		log.Fatal("DATABASE_URL is not set")
+	}
 	jwtSecret := os.Getenv("JWT_SECRET")
 	accessTokenTTL := 15 * time.Minute
 	refreshTokenTTL := 24 * time.Hour * 30

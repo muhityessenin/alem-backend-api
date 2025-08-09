@@ -24,7 +24,7 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found")
 	}
-	dbConnStr := os.Getenv("DATABASE_URL")
+	dbConnStr := os.Getenv("DB_URL")
 	port := os.Getenv("PORT")
 	jwtSecret := os.Getenv("JWT_SECRET")
 
