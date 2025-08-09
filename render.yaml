@@ -7,13 +7,12 @@ services:
     autoDeploy: true
     plan: free
     envVars:
-      # Перенеси значения из ./auth/.env в эти переменные (или оформи Env Var Group)
       - key: PORT
         value: "8080"
       - key: JWT_SECRET
         value: "EACBXCIVYXWYFJKMWNEJWUIHQVISPJZWQATTIXDTJPWSNOAIOOJHLLQFMGDXGWNO"
       - key: DB_URL
-        value: "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a/alem_db"
+        value: "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a.oregon-postgres.render.com/alem_db"
 
   - type: web
     name: user-service
@@ -28,7 +27,7 @@ services:
       - key: JWT_SECRET
         value: "EACBXCIVYXWYFJKMWNEJWUIHQVISPJZWQATTIXDTJPWSNOAIOOJHLLQFMGDXGWNO"
       - key: DB_URL
-        value: "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a/alem_db"
+        value: "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a.oregon-postgres.render.com/alem_db"
 
 
   - type: web
@@ -44,5 +43,5 @@ services:
       - key: JWT_SECRET
         value: "EACBXCIVYXWYFJKMWNEJWUIHQVISPJZWQATTIXDTJPWSNOAIOOJHLLQFMGDXGWNO"
       - key: DB_URL
-        value: "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a/alem_db"
+        value: "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a.oregon-postgres.render.com/alem_db"
 
