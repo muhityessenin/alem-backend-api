@@ -21,7 +21,7 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found")
 	}
-	dbConnStr := os.Getenv("DATABASE_URL")
+	dbConnStr := "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a.oregon-postgres.render.com/alem_db"
 	jwtSecret := os.Getenv("JWT_SECRET")
 	accessTokenTTL := 15 * time.Minute
 	refreshTokenTTL := 24 * time.Hour * 30
