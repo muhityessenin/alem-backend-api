@@ -13,6 +13,7 @@ import (
 	"auth/internal/repository"
 	"auth/internal/usecase"
 
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -21,7 +22,7 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found")
 	}
-	dbConnStr := "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a.oregon-postgres.render.com/alem_db"
+	dbConnStr := os.Getenv("DATABASE_URL")
 	jwtSecret := os.Getenv("JWT_SECRET")
 	accessTokenTTL := 15 * time.Minute
 	refreshTokenTTL := 24 * time.Hour * 30
@@ -34,7 +35,6 @@ func main() {
 
 	userRepo := repository.NewUserPostgresRepo(dbpool)
 
-	// Обновляем создание usecase, передавая новые параметры
 	authUseCase := usecase.NewAuthUseCase(userRepo, jwtSecret, accessTokenTTL, refreshTokenTTL)
 
 	authHandler := delivery.NewAuthHandler(authUseCase)
@@ -42,9 +42,17 @@ func main() {
 	router := mux.NewRouter()
 	authHandler.RegisterRoutes(router)
 
+	// CORS настройки
+	corsHandler := handlers.CORS(
+		handlers.AllowedOrigins([]string{"*"}), // Разрешить все источники (лучше ограничить)
+		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
+		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
+	)
+
 	port := os.Getenv("PORT")
 	log.Printf("Auth service starting on port %s", port)
-	if err := http.ListenAndServe(fmt.Sprintf(":%s", port), router); err != nil {
+
+	if err := http.ListenAndServe(fmt.Sprintf(":%s", port), corsHandler(router)); err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}
 }
