@@ -7,12 +7,57 @@ services:
     autoDeploy: true
     plan: free
     envVars:
+      - key: APP_NAME
+        value: "auth"
+      - key: APP_ENV
+        value: "dev"
       - key: PORT
         value: "8080"
-      - key: JWT_SECRET
-        value: "EACBXCIVYXWYFJKMWNEJWUIHQVISPJZWQATTIXDTJPWSNOAIOOJHLLQFMGDXGWNO"
+      - key: HTTP_READ_TIMEOUT
+        value: "10s"
+      - key: HTTP_WRITE_TIMEOUT
+        value: "15s"
+      - key: HTTP_IDLE_TIMEOUT
+        value: "60s"
+
       - key: DB_URL
         value: "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a.oregon-postgres.render.com/alem_db"
+      - key: DB_MAX_CONNS
+        value: "20"
+      - key: DB_MIN_CONNS
+        value: "2"
+      - key: DB_MAX_CONN_LIFETIME
+        value: "30m"
+      - key: DB_MAX_CONN_IDLE_TIME
+        value: "5m"
+
+      - key: JWT_ACCESS_SECRET
+        value: "37bfc5153ab3f33ab9f9c610621ac26686c7a38ca00b945b6fa2b08ab15c6c2b"
+      - key: JWT_REFRESH_SECRET
+        value: "2d4ddb6a90abcb23c4b554ae076486794dfca45e4f1fe32c89001871486482af"
+      - key: JWT_ACCESS_TTL
+        value: "15m"
+      - key: JWT_REFRESH_TTL
+        value: "720h"
+      - key: JWT_ISSUER
+        value: "alem-auth"
+      - key: JWT_AUDIENCE
+        value: "alem-clients"
+
+      - key: OTP_ENABLED
+        value: "true"
+      - key: OTP_TTL
+        value: "2m"
+      - key: OTP_LENGTH
+        value: "6"
+
+      - key: CORS_ALLOWED_ORIGINS
+        value: "*"
+      - key: CORS_ALLOWED_METHODS
+        value: "GET,POST,PUT,DELETE,OPTIONS"
+      - key: CORS_ALLOWED_HEADERS
+        value: "Content-Type,Authorization"
+
 
   - type: web
     name: user-service
@@ -22,12 +67,57 @@ services:
     autoDeploy: true
     plan: free
     envVars:
+      - key: APP_NAME
+        value: "user"
+      - key: APP_ENV
+        value: "dev"
       - key: PORT
         value: "8080"
-      - key: JWT_SECRET
-        value: "EACBXCIVYXWYFJKMWNEJWUIHQVISPJZWQATTIXDTJPWSNOAIOOJHLLQFMGDXGWNO"
+      - key: HTTP_READ_TIMEOUT
+        value: "10s"
+      - key: HTTP_WRITE_TIMEOUT
+        value: "15s"
+      - key: HTTP_IDLE_TIMEOUT
+        value: "60s"
+
       - key: DB_URL
         value: "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a.oregon-postgres.render.com/alem_db"
+      - key: DB_MAX_CONNS
+        value: "20"
+      - key: DB_MIN_CONNS
+        value: "2"
+      - key: DB_MAX_CONN_LIFETIME
+        value: "30m"
+      - key: DB_MAX_CONN_IDLE_TIME
+        value: "5m"
+
+      - key: JWT_ACCESS_SECRET
+        value: "37bfc5153ab3f33ab9f9c610621ac26686c7a38ca00b945b6fa2b08ab15c6c2b"
+      - key: JWT_REFRESH_SECRET
+        value: "2d4ddb6a90abcb23c4b554ae076486794dfca45e4f1fe32c89001871486482af"
+      - key: JWT_ACCESS_TTL
+        value: "15m"
+      - key: JWT_REFRESH_TTL
+        value: "720h"
+      - key: JWT_ISSUER
+        value: "alem-user"
+      - key: JWT_AUDIENCE
+        value: "user-clients"
+
+      - key: OTP_ENABLED
+        value: "true"
+      - key: OTP_TTL
+        value: "2m"
+      - key: OTP_LENGTH
+        value: "6"
+
+      - key: CORS_ALLOWED_ORIGINS
+        value: "*"
+      - key: CORS_ALLOWED_METHODS
+        value: "GET,POST,PUT,DELETE,OPTIONS"
+      - key: CORS_ALLOWED_HEADERS
+        value: "Content-Type,Authorization"
+
 
 
   - type: web
@@ -38,10 +128,55 @@ services:
     autoDeploy: true
     plan: free
     envVars:
+      - key: APP_NAME
+        value: "tutor"
+      - key: APP_ENV
+        value: "dev"
       - key: PORT
         value: "8080"
-      - key: JWT_SECRET
-        value: "EACBXCIVYXWYFJKMWNEJWUIHQVISPJZWQATTIXDTJPWSNOAIOOJHLLQFMGDXGWNO"
+      - key: HTTP_READ_TIMEOUT
+        value: "10s"
+      - key: HTTP_WRITE_TIMEOUT
+        value: "15s"
+      - key: HTTP_IDLE_TIMEOUT
+        value: "60s"
+
       - key: DB_URL
         value: "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a.oregon-postgres.render.com/alem_db"
+      - key: DB_MAX_CONNS
+        value: "20"
+      - key: DB_MIN_CONNS
+        value: "2"
+      - key: DB_MAX_CONN_LIFETIME
+        value: "30m"
+      - key: DB_MAX_CONN_IDLE_TIME
+        value: "5m"
+
+      - key: JWT_ACCESS_SECRET
+        value: "37bfc5153ab3f33ab9f9c610621ac26686c7a38ca00b945b6fa2b08ab15c6c2b"
+      - key: JWT_REFRESH_SECRET
+        value: "2d4ddb6a90abcb23c4b554ae076486794dfca45e4f1fe32c89001871486482af"
+      - key: JWT_ACCESS_TTL
+        value: "15m"
+      - key: JWT_REFRESH_TTL
+        value: "720h"
+      - key: JWT_ISSUER
+        value: "alem-tutor"
+      - key: JWT_AUDIENCE
+        value: "tutor-clients"
+
+      - key: OTP_ENABLED
+        value: "true"
+      - key: OTP_TTL
+        value: "2m"
+      - key: OTP_LENGTH
+        value: "6"
+
+      - key: CORS_ALLOWED_ORIGINS
+        value: "*"
+      - key: CORS_ALLOWED_METHODS
+        value: "GET,POST,PUT,DELETE,OPTIONS"
+      - key: CORS_ALLOWED_HEADERS
+        value: "Content-Type,Authorization"
+
 
