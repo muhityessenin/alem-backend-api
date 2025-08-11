@@ -21,7 +21,7 @@ services:
         value: "60s"
 
       - key: DB_URL
-        value: "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a.oregon-postgres.render.com/alem_db"
+        value: "postgresql://muhit:1keYlORFZ4y70UJtkKdNV7oblQh1PU83@dpg-d2cu3l15pdvs73e20u0g-a.oregon-postgres.render.com/alem_db_zrz6"
       - key: DB_MAX_CONNS
         value: "20"
       - key: DB_MIN_CONNS
@@ -81,7 +81,7 @@ services:
         value: "60s"
 
       - key: DB_URL
-        value: "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a.oregon-postgres.render.com/alem_db"
+        value: "postgresql://muhit:1keYlORFZ4y70UJtkKdNV7oblQh1PU83@dpg-d2cu3l15pdvs73e20u0g-a.oregon-postgres.render.com/alem_db_zrz6"
       - key: DB_MAX_CONNS
         value: "20"
       - key: DB_MIN_CONNS
@@ -142,7 +142,7 @@ services:
         value: "60s"
 
       - key: DB_URL
-        value: "postgresql://root:V9ENYoHKjvjJ5m0pdWxZ6cxm7sQG9X1y@dpg-d2abklndiees738s14k0-a.oregon-postgres.render.com/alem_db"
+        value: "postgresql://muhit:1keYlORFZ4y70UJtkKdNV7oblQh1PU83@dpg-d2cu3l15pdvs73e20u0g-a.oregon-postgres.render.com/alem_db_zrz6"
       - key: DB_MAX_CONNS
         value: "20"
       - key: DB_MIN_CONNS

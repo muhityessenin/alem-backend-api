@@ -41,12 +41,13 @@ ALTER TABLE payouts
     ADD COLUMN IF NOT EXISTS owner_id uuid,
     ADD COLUMN IF NOT EXISTS legacy_tutor_id uuid;
 UPDATE payouts SET owner_type='tutor', owner_id=tutor_id WHERE owner_id IS NULL AND tutor_id IS NOT NULL;
+
 ALTER TABLE payouts
-    ADD CONSTRAINT IF NOT EXISTS payouts_owner_ck CHECK (
-    (owner_type='tutor'    AND owner_id IS NOT NULL) OR
-    (owner_type='student'  AND owner_id IS NOT NULL) OR
-    (owner_type='platform' AND owner_id IS NOT NULL)
-    );
+    ADD CONSTRAINT payouts_owner_ck CHECK (
+        (owner_type='tutor'    AND owner_id IS NOT NULL) OR
+        (owner_type='student'  AND owner_id IS NOT NULL) OR
+        (owner_type='platform' AND owner_id IS NOT NULL)
+        );
 
 -- 11.4 Google Calendar
 CREATE TABLE IF NOT EXISTS oauth_tokens (

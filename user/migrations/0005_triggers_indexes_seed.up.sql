@@ -17,10 +17,9 @@ CREATE TRIGGER trg_wallet_entries_updated BEFORE UPDATE ON wallet_entries FOR EA
 CREATE TRIGGER trg_payouts_updated BEFORE UPDATE ON payouts FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- начальные справочники
-INSERT INTO languages(code,name) VALUES
-    ('ru','Русский') ON CONFLICT DO NOTHING,
-  ('en','English') ON CONFLICT DO NOTHING,
-    ('kk','Қазақ тілі') ON CONFLICT DO NOTHING;
+INSERT INTO languages(code,name) VALUES ('ru','Русский') ON CONFLICT DO NOTHING;
+INSERT INTO languages(code,name) VALUES ('en','English') ON CONFLICT DO NOTHING;
+INSERT INTO languages(code,name) VALUES ('kk','Қазақ тілі') ON CONFLICT DO NOTHING;
 
 INSERT INTO subjects(slug,name) VALUES
                                     ('english', '{"ru":"Английский","en":"English"}'),
