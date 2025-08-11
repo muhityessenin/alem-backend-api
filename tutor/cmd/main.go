@@ -2,84 +2,64 @@ package main
 
 import (
 	"context"
-	"database/sql"
-	"errors"
-	"fmt"
-	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/gorilla/mux"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
 	"log"
 	"net/http"
 	"os"
-	delivery "tutor/internal/delivery/http"
+	"time"
+
+	"tutor/internal/delivery/httpapi"
 	"tutor/internal/repository"
 	"tutor/internal/usecase"
+
+	"github.com/gorilla/mux"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found")
-	}
-	dbConnStr := os.Getenv("DB_URL")
-	port := os.Getenv("PORT")
-	jwtSecret := os.Getenv("JWT_SECRET")
+	dbURL := mustEnv("DB_URL")
+	port := env("PORT", "8081")
+	jwtSecret := mustEnv("JWT_SECRET")
 
-	// log.Println("Running database migrations...")
-	// err := runMigrations(dbConnStr)
-	// if err != nil {
-	//	log.Fatalf("Could not run database migrations: %v", err)
-	// }
-	// log.Println("Database migrations completed successfully.")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	dbpool, err := pgxpool.New(context.Background(), dbConnStr)
+	pgxCfg, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
-		log.Fatalf("Unable to connect to database: %v\n", err)
+		log.Fatalf("parse db url: %v", err)
 	}
-	defer dbpool.Close()
-
-	tutorRepo := repository.NewTutorPostgresRepo(dbpool)
-	reviewRepo := repository.NewReviewPostgresRepo(dbpool)
-	tutorUseCase := usecase.NewTutorUseCase(tutorRepo)
-	reviewUseCase := usecase.NewReviewUseCase(reviewRepo)
-	tokenUseCase := usecase.NewTokenUseCase(jwtSecret) // <-- Add this
-
-	tutorHandler := delivery.NewTutorHandler(tutorUseCase, reviewUseCase, tokenUseCase)
-	router := mux.NewRouter()
-	tutorHandler.RegisterRoutes(router)
-
-	log.Printf("Tutor service starting on port %s", port)
-	if err := http.ListenAndServe(fmt.Sprintf(":%s", port), router); err != nil {
-		log.Fatalf("failed to start server: %v", err)
-	}
-}
-func runMigrations(dbURL string) error {
-	// Open a standard database connection for the migration.
-	db, err := sql.Open("postgres", dbURL)
+	pgxCfg.MaxConns = 20
+	db, err := pgxpool.NewWithConfig(ctx, pgxCfg)
 	if err != nil {
-		return fmt.Errorf("could not open db connection for migration: %w", err)
+		log.Fatalf("connect db: %v", err)
 	}
 	defer db.Close()
 
-	// Create a new driver instance with the connection.
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
-	if err != nil {
-		return fmt.Errorf("could not create postgres driver for migration: %w", err)
-	}
+	// wiring (classes)
+	tutorRepo := repository.NewTutorRepository(db)
+	tokenUC := usecase.NewTokenUseCase(jwtSecret)
+	tutorUC := usecase.NewTutorUseCase(tutorRepo)
 
-	// Create a new migrate instance.
-	m, err := migrate.NewWithDatabaseInstance("file://migrations", "postgres", driver)
-	if err != nil {
-		return fmt.Errorf("could not create migrate instance: %w", err)
-	}
+	r := mux.NewRouter()
+	api := httpapi.NewTutorHandler(tutorUC, tokenUC)
+	api.RegisterRoutes(r)
 
-	// Run the migrations.
-	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return fmt.Errorf("could not apply migrations: %w", err)
+	addr := ":" + port
+	log.Printf("tutor service listening on %s", addr)
+	if err := http.ListenAndServe(addr, r); err != nil {
+		log.Fatal(err)
 	}
+}
 
-	return nil
+func mustEnv(k string) string {
+	v := os.Getenv(k)
+	if v == "" {
+		log.Fatalf("missing env %s", k)
+	}
+	return v
+}
+func env(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
 }

@@ -1,284 +1,235 @@
-package http
+package httpapi
 
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
+
 	"tutor/internal/domain"
+	"tutor/internal/usecase"
 
 	"github.com/gorilla/mux"
-	"tutor/internal/usecase"
 )
 
-type CtxKey string
+type ctxKey string
 
 const (
-	UserIDKey   CtxKey = "userID"
-	UserRoleKey CtxKey = "userRole"
+	userIDKey ctxKey = "userID"
 )
 
 type TutorHandler struct {
-	useCase       usecase.TutorUseCase
-	tokenUseCase  usecase.TokenUseCase
-	reviewUseCase usecase.ReviewUseCase
+	tutorUC usecase.TutorUseCase
+	tokenUC usecase.TokenUseCase
 }
 
-func NewTutorHandler(tuc usecase.TutorUseCase, ruc usecase.ReviewUseCase, tokuc usecase.TokenUseCase) *TutorHandler {
-	return &TutorHandler{useCase: tuc, reviewUseCase: ruc, tokenUseCase: tokuc}
+func NewTutorHandler(t usecase.TutorUseCase, tok usecase.TokenUseCase) *TutorHandler {
+	return &TutorHandler{tutorUC: t, tokenUC: tok}
 }
 
-func (h *TutorHandler) RegisterRoutes(router *mux.Router) {
-	router.HandleFunc("/api/tutors", h.listTutors).Methods("GET")
-	router.HandleFunc("/api/tutors/{id}", h.getTutorDetails).Methods("GET")
-	router.HandleFunc("/api/tutors/{id}/reviews", h.listTutorReviews).Methods("GET")
+func (h *TutorHandler) RegisterRoutes(r *mux.Router) {
+	// public
+	r.HandleFunc("/v1/tutors", h.listTutors).Methods("GET")
+	r.HandleFunc("/v1/tutors/{id}", h.tutorDetails).Methods("GET")
 
-	protected := router.PathPrefix("/api/tutors").Subrouter()
-	protected.Use(h.JWTMiddleware)
-	protected.HandleFunc("/profile", h.updateTutorProfile).Methods("PUT")
-	protected.HandleFunc("/reviews", h.createReview).Methods("POST") // <-- Our new route
-
+	// protected wizard
+	pr := r.PathPrefix("/v1/tutors/profile").Subrouter()
+	pr.Use(h.jwt())
+	pr.HandleFunc("/about", h.upsertAbout).Methods("PUT")
+	pr.HandleFunc("/availability", h.replaceAvailability).Methods("PUT")
+	pr.HandleFunc("/education", h.upsertEducation).Methods("PUT")
+	pr.HandleFunc("/subjects", h.replaceSubjects).Methods("PUT")
+	pr.HandleFunc("/video", h.setVideo).Methods("PUT")
+	pr.HandleFunc("/complete", h.complete).Methods("POST")
 }
 
+// ---------- middleware ----------
+func (h *TutorHandler) jwt() mux.MiddlewareFunc {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hdr := r.Header.Get("Authorization")
+			if hdr == "" {
+				writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing Authorization")
+				return
+			}
+			parts := strings.Split(hdr, " ")
+			if len(parts) != 2 || parts[0] != "Bearer" {
+				writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid Authorization")
+				return
+			}
+			claims, err := h.tokenUC.ParseToken(r.Context(), parts[1])
+			if err != nil {
+				writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid token")
+				return
+			}
+			ctx := context.WithValue(r.Context(), userIDKey, claims.UserID)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// ---------- DTOs ----------
+type aboutDTO struct {
+	FirstName string                 `json:"firstName"`
+	LastName  string                 `json:"lastName"`
+	Phone     string                 `json:"phone"`
+	Gender    string                 `json:"gender"`
+	AvatarURL string                 `json:"avatarUrl"` // уже загруженный URL/ключ
+	Languages []domain.TutorLanguage `json:"languages"`
+}
+type availabilityDTO struct {
+	Timezone string                   `json:"timezone"`
+	Days     []domain.AvailabilityDay `json:"days"`
+}
+type educationDTO struct {
+	Description  string                 `json:"description"`
+	Education    []domain.Education     `json:"education"`
+	Certificates []domain.Certification `json:"certificates"`
+}
+type subjectsDTO struct {
+	Items      []domain.TutorSubjectDTO `json:"items"`
+	RegularMap map[string]int64         `json:"regularPrices"` // slug -> minor
+	TrialMap   map[string]int64         `json:"trialPrices"`
+}
+type videoDTO struct {
+	VideoURL string `json:"videoUrl"`
+}
+
+// ---------- handlers (wizard) ----------
+func (h *TutorHandler) upsertAbout(w http.ResponseWriter, r *http.Request) {
+	var req aboutDTO
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "INVALID_BODY", "bad json")
+		return
+	}
+	uid := r.Context().Value(userIDKey).(string)
+	if err := h.tutorUC.UpsertAbout(r.Context(), uid, req.FirstName, req.LastName, req.Phone, req.Gender, req.AvatarURL, req.Languages); err != nil {
+		writeErr(w, http.StatusInternalServerError, "UPsertAbout_FAILED", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"saved": true})
+}
+
+func (h *TutorHandler) replaceAvailability(w http.ResponseWriter, r *http.Request) {
+	var req availabilityDTO
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "INVALID_BODY", "bad json")
+		return
+	}
+	if req.Timezone == "" {
+		req.Timezone = "Asia/Almaty"
+	}
+	uid := r.Context().Value(userIDKey).(string)
+	if err := h.tutorUC.ReplaceAvailability(r.Context(), uid, req.Timezone, req.Days); err != nil {
+		writeErr(w, http.StatusInternalServerError, "AVAILABILITY_FAILED", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"saved": true})
+}
+
+func (h *TutorHandler) upsertEducation(w http.ResponseWriter, r *http.Request) {
+	var req educationDTO
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "INVALID_BODY", "bad json")
+		return
+	}
+	uid := r.Context().Value(userIDKey).(string)
+	if err := h.tutorUC.UpsertEducation(r.Context(), uid, req.Description, req.Education, req.Certificates); err != nil {
+		writeErr(w, http.StatusInternalServerError, "EDU_FAILED", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"saved": true})
+}
+
+func (h *TutorHandler) replaceSubjects(w http.ResponseWriter, r *http.Request) {
+	var req subjectsDTO
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "INVALID_BODY", "bad json")
+		return
+	}
+	uid := r.Context().Value(userIDKey).(string)
+	if err := h.tutorUC.ReplaceSubjects(r.Context(), uid, req.Items, req.RegularMap, req.TrialMap); err != nil {
+		writeErr(w, http.StatusInternalServerError, "SUBJECTS_FAILED", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"saved": true})
+}
+
+func (h *TutorHandler) setVideo(w http.ResponseWriter, r *http.Request) {
+	var req videoDTO
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "INVALID_BODY", "bad json")
+		return
+	}
+	uid := r.Context().Value(userIDKey).(string)
+	if err := h.tutorUC.SetVideo(r.Context(), uid, req.VideoURL); err != nil {
+		writeErr(w, http.StatusInternalServerError, "VIDEO_FAILED", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"saved": true})
+}
+
+func (h *TutorHandler) complete(w http.ResponseWriter, r *http.Request) {
+	uid := r.Context().Value(userIDKey).(string)
+	if err := h.tutorUC.Complete(r.Context(), uid); err != nil {
+		writeErr(w, http.StatusInternalServerError, "COMPLETE_FAILED", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"saved": true})
+}
+
+// ---------- public list/details ----------
 func (h *TutorHandler) listTutors(w http.ResponseWriter, r *http.Request) {
-	// --- Парсинг параметров запроса ---
-	query := r.URL.Query()
-
-	// Пагинация
-	page, err := strconv.Atoi(query.Get("page"))
-	if err != nil || page < 1 {
+	q := r.URL.Query()
+	page, _ := strconv.Atoi(q.Get("page"))
+	if page < 1 {
 		page = 1
 	}
-
-	limit, err := strconv.Atoi(query.Get("limit"))
-	if err != nil || limit < 1 {
-		limit = 20 // Значение по умолчанию
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit < 1 {
+		limit = 20
 	}
 
-	// Фильтры
-	filters := make(map[string]string)
-	if search := query.Get("search"); search != "" {
-		filters["search"] = search
+	filters := map[string]string{
+		"search": q.Get("search"),
 	}
-	// TODO: Добавить чтение других фильтров (subject, language, etc.)
-
-	// --- Вызов бизнес-логики ---
-	tutors, pagination, err := h.useCase.List(r.Context(), filters, page, limit)
+	list, p, err := h.tutorUC.List(r.Context(), filters, page, limit)
 	if err != nil {
-		log.Printf("ERROR: Failed to list tutors: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		writeErr(w, http.StatusInternalServerError, "LIST_FAILED", err.Error())
 		return
 	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": map[string]any{
+		"tutors": list, "pagination": p,
+	}})
+}
 
-	// --- Формирование ответа ---
-	response := map[string]interface{}{
-		"success": true,
-		"data": map[string]interface{}{
-			"tutors":     tutors,
-			"pagination": pagination,
+func (h *TutorHandler) tutorDetails(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+	obj, err := h.tutorUC.GetDetails(r.Context(), id)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "NOT_FOUND", "tutor not found")
+		return
+	}
+	// клиенту может быть полезен IP/UA (пример)
+	_ = net.IP{}.String
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": obj})
+}
+
+// ---------- helpers ----------
+func writeErr(w http.ResponseWriter, code int, errCode, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"success": false,
+		"error": map[string]string{
+			"code": errCode, "message": msg,
 		},
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-func (h *TutorHandler) getTutorDetails(w http.ResponseWriter, r *http.Request) {
-	// Extract the ID from the URL path
-	vars := mux.Vars(r)
-	id, ok := vars["id"]
-	if !ok {
-		log.Println("ERROR: Missing tutor ID in request")
-		http.Error(w, "Tutor ID is required", http.StatusBadRequest)
-		return
-	}
-
-	tutor, err := h.useCase.GetDetails(r.Context(), id)
-	if err != nil {
-		// TODO: Handle 'not found' error specifically
-		log.Printf("ERROR: Failed to get tutor details for ID %s: %v", id, err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	response := map[string]interface{}{
-		"success": true,
-		"data":    tutor,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-// In alem-backend/tutor/internal/delivery/http/handler.go
-
-// Replace your existing JWTMiddleware with this one.
-func (h *TutorHandler) JWTMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, `{"success": false, "error": {"code": "UNAUTHORIZED", "message": "Missing authorization header"}}`, http.StatusUnauthorized)
-			return
-		}
-
-		headerParts := strings.Split(authHeader, " ")
-		if len(headerParts) != 2 || headerParts[0] != "Bearer" {
-			http.Error(w, `{"success": false, "error": {"code": "UNAUTHORIZED", "message": "Invalid authorization header format"}}`, http.StatusUnauthorized)
-			return
-		}
-
-		tokenString := headerParts[1]
-		claims, err := h.tokenUseCase.ParseToken(r.Context(), tokenString)
-		if err != nil {
-			log.Printf("WARN: Failed to parse token: %v", err)
-			http.Error(w, `{"success": false, "error": {"code": "UNAUTHORIZED", "message": "Invalid or expired token"}}`, http.StatusUnauthorized)
-			return
-		}
-
-		// --- THIS IS THE FIX ---
-		// We are explicitly using claims.UserID for the UserIDKey.
-		ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
-		// We are not using the role here, but if we needed it, it would have its own key.
-		// ctx = context.WithValue(ctx, UserRoleKey, claims.Role)
-
-		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
-
-// Add this new handler function inside handler.go
-func (h *TutorHandler) updateTutorProfile(w http.ResponseWriter, r *http.Request) {
-	// Get tutor ID from the token to ensure they only update their own profile
-	tutorID, ok := r.Context().Value(UserIDKey).(string)
-	if !ok {
-		http.Error(w, "Unauthorized: Invalid token", http.StatusUnauthorized)
-		return
-	}
-
-	var tutorDetails domain.Tutor
-	if err := json.NewDecoder(r.Body).Decode(&tutorDetails); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	// Important: Enforce that the ID from the token is used, not any ID from the request body
-	tutorDetails.ID = tutorID
-
-	updatedTutor, err := h.useCase.UpdateProfile(r.Context(), &tutorDetails)
-	if err != nil {
-		log.Printf("ERROR: Failed to update tutor profile for ID %s: %v", tutorID, err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	response := map[string]interface{}{
-		"success": true,
-		"data":    updatedTutor,
-	}
-
+func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-func (h *TutorHandler) listTutorReviews(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id := vars["id"]
-
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	if page < 1 {
-		page = 1
-	}
-
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit < 1 {
-		limit = 10
-	}
-
-	reviews, pagination, stats, err := h.reviewUseCase.ListByTutor(r.Context(), id, page, limit)
-	if err != nil {
-		log.Printf("ERROR: Failed to list reviews for tutor %s: %v", id, err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	response := map[string]interface{}{
-		"success": true,
-		"data": map[string]interface{}{
-			"reviews":            reviews,
-			"pagination":         pagination,
-			"averageRating":      stats.AverageRating,
-			"ratingDistribution": stats.RatingDistribution,
-		},
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-func (h *TutorHandler) createReview(w http.ResponseWriter, r *http.Request) {
-	// Get student ID from the token to ensure they are creating the review for themselves
-	studentID, ok := r.Context().Value(UserIDKey).(string)
-	if !ok {
-		http.Error(w, "Unauthorized: Invalid token", http.StatusUnauthorized)
-		return
-	}
-
-	var req domain.Review
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	// Security: Enforce the student ID from the token
-	req.StudentId = studentID
-
-	createdReview, err := h.reviewUseCase.Create(r.Context(), &req)
-	if err != nil {
-		// This could be a "Conflict" error if a review for this booking already exists
-		log.Printf("ERROR: Failed to create review for student %s: %v", studentID, err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	response := map[string]interface{}{
-		"success": true,
-		"data":    createdReview,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated) // Use 201 Created for new resources
-	json.NewEncoder(w).Encode(response)
-}
-
-func (h *TutorHandler) listPendingTutors(w http.ResponseWriter, r *http.Request) {
-	// Parse pagination from query parameters
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	if page < 1 {
-		page = 1
-	}
-
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit < 1 {
-		limit = 10 // Default limit
-	}
-
-	// Call the use case to get the data
-	tutors, pagination, err := h.useCase.ListPending(r.Context(), page, limit)
-	if err != nil {
-		log.Printf("ERROR: Failed to list pending tutors: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	// Format and send the response
-	response := map[string]interface{}{
-		"success": true,
-		"data": map[string]interface{}{
-			"tutors":     tutors,
-			"pagination": pagination,
-		},
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(v)
 }
