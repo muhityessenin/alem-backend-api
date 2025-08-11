@@ -14,7 +14,6 @@ type UserRepository interface {
 	UpdateProfile(ctx context.Context, user *domain.User) error
 	UpdateAvatarURL(ctx context.Context, userID, avatarURL string) error
 	FindStudents(ctx context.Context, page, limit int) ([]domain.User, int, error) // New method
-
 }
 
 type userPostgresRepo struct {

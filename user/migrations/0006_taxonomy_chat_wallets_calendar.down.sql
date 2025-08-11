@@ -1,28 +1,27 @@
--- Удаление индексов (если требуется явно)
-DROP INDEX IF EXISTS lessons_scheduled_starts_idx;
-DROP INDEX IF EXISTS outbox_status_created_idx;
-DROP INDEX IF EXISTS messages_conv_created_idx;
-DROP INDEX IF EXISTS conversations_pair_uniq;
-DROP INDEX IF EXISTS wallet_entries_wallet_created_idx;
-DROP INDEX IF EXISTS payments_student_created_idx;
-DROP INDEX IF EXISTS lessons_tutor_status_idx;
-DROP INDEX IF EXISTS bookings_tutor_starts_idx;
-DROP INDEX IF EXISTS availability_slots_tutor_starts_idx;
+-- 11.4 Google Calendar
+DROP TABLE IF EXISTS calendar_events CASCADE;
+DROP TABLE IF EXISTS calendar_accounts CASCADE;
+DROP INDEX IF EXISTS oauth_tokens_user_provider_uniq;
+DROP TABLE IF EXISTS oauth_tokens CASCADE;
 
--- Очистка сидов
-DELETE FROM subjects WHERE slug IN ('english','math','kazakh');
-DELETE FROM languages WHERE code IN ('ru','en','kk');
+-- 11.3 Универсальные выплаты (откат к старой схеме)
+ALTER TABLE payouts DROP CONSTRAINT IF EXISTS payouts_owner_ck;
+-- Данные в owner_type/owner_id останутся; при желании можно их очистить
+ALTER TABLE payouts DROP COLUMN IF EXISTS owner_id;
+ALTER TABLE payouts DROP COLUMN IF EXISTS owner_type;
+ALTER TABLE payouts DROP COLUMN IF EXISTS legacy_tutor_id;
 
--- Триггеры
-DROP TRIGGER IF EXISTS trg_users_updated ON users;
-DROP TRIGGER IF EXISTS trg_student_profiles_updated ON student_profiles;
-DROP TRIGGER IF EXISTS trg_tutor_profiles_updated ON tutor_profiles;
-DROP TRIGGER IF EXISTS trg_availability_slots_updated ON availability_slots;
-DROP TRIGGER IF EXISTS trg_bookings_updated ON bookings;
-DROP TRIGGER IF EXISTS trg_lessons_updated ON lessons;
-DROP TRIGGER IF EXISTS trg_payments_updated ON payments;
-DROP TRIGGER IF EXISTS trg_wallet_entries_updated ON wallet_entries;
-DROP TRIGGER IF EXISTS trg_payouts_updated ON payouts;
+-- 11.2 Запросы на чат
+DROP INDEX IF EXISTS conversations_pending_idx;
+ALTER TABLE conversations DROP COLUMN IF EXISTS approved_at;
+ALTER TABLE conversations DROP COLUMN IF EXISTS initiator_id;
+ALTER TABLE conversations DROP COLUMN IF EXISTS status;
 
--- Функция
-DROP FUNCTION IF EXISTS set_updated_at();
+-- 11.1 Таксономия
+DROP INDEX IF EXISTS lessons_subdir_idx;
+DROP INDEX IF EXISTS bookings_subdir_idx;
+ALTER TABLE lessons  DROP COLUMN IF EXISTS subdirection_id;
+ALTER TABLE bookings DROP COLUMN IF EXISTS subdirection_id;
+DROP TABLE IF EXISTS tutor_subdirections CASCADE;
+DROP TABLE IF EXISTS subdirections CASCADE;
+DROP TABLE IF EXISTS directions CASCADE;

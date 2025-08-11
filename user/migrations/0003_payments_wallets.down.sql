@@ -1,5 +1,5 @@
-ALTER TABLE users
-ADD COLUMN level TEXT,             -- e.g., 'Beginner', 'Intermediate'
-ADD COLUMN native_language TEXT,
-ADD COLUMN budget NUMERIC(10, 2),
-ADD COLUMN availability TEXT[];
+DROP TABLE IF EXISTS payouts CASCADE;
+DROP TABLE IF EXISTS wallet_entries CASCADE;
+DROP TABLE IF EXISTS wallets CASCADE;
+DROP TABLE IF EXISTS commissions CASCADE;
+DROP TABLE IF EXISTS payments CASCADE;

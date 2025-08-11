@@ -1,65 +1,104 @@
-CREATE TABLE payments (
+CREATE TABLE conversations (
+                               id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                               student_id uuid NOT NULL REFERENCES student_profiles(user_id),
+                               tutor_id uuid NOT NULL REFERENCES tutor_profiles(user_id),
+                               created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS conversations_pair_uniq ON conversations (student_id, tutor_id);
+
+CREATE TABLE messages (
                           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-                          booking_id uuid REFERENCES bookings(id),
-                          lesson_id uuid REFERENCES lessons(id),
-                          student_id uuid NOT NULL REFERENCES student_profiles(user_id),
-                          amount_minor bigint NOT NULL,
-                          currency char(3) NOT NULL,
-                          provider text NOT NULL,
-                          provider_intent_id text,
-                          provider_payload jsonb NOT NULL DEFAULT '{}'::jsonb,
-                          status text NOT NULL CHECK (status IN ('requires_action','authorized','captured','failed','refunded','voided')),
-                          idempotency_key text UNIQUE,
-                          created_at timestamptz NOT NULL DEFAULT now(),
-                          updated_at timestamptz NOT NULL DEFAULT now()
+                          conversation_id uuid NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+                          sender_id uuid NOT NULL REFERENCES users(id),
+                          body text,
+                          body_redacted text,
+                          meta jsonb NOT NULL DEFAULT '{}'::jsonb,
+                          created_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS payments_student_created_idx ON payments (student_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS messages_conv_created_idx ON messages (conversation_id, created_at);
 
-CREATE TABLE commissions (
-                             id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-                             lesson_id uuid UNIQUE REFERENCES lessons(id),
-                             commission_minor bigint NOT NULL,
-                             tutor_earn_minor bigint NOT NULL,
-                             currency char(3) NOT NULL,
-                             rule_version text NOT NULL,
-                             details jsonb NOT NULL DEFAULT '{}'::jsonb,
-                             created_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE TABLE wallets (
+CREATE TABLE reviews (
                          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-                         owner_type text NOT NULL CHECK (owner_type IN ('tutor','student','platform')),
-                         owner_id uuid NOT NULL,
-                         currency char(3) NOT NULL,
-                         UNIQUE(owner_type, owner_id, currency)
-);
-
-CREATE TABLE wallet_entries (
-                                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-                                wallet_id uuid NOT NULL REFERENCES wallets(id),
-                                lesson_id uuid REFERENCES lessons(id),
-                                payment_id uuid REFERENCES payments(id),
-                                type text NOT NULL CHECK (type IN ('credit','debit')),
-                                reason text NOT NULL,
-                                amount_minor bigint NOT NULL,
-                                balance_after bigint NOT NULL,
-                                created_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS wallet_entries_wallet_created_idx ON wallet_entries (wallet_id, created_at);
-
-CREATE TABLE payouts (
-                         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                         lesson_id uuid UNIQUE REFERENCES lessons(id),
+                         student_id uuid NOT NULL REFERENCES student_profiles(user_id),
                          tutor_id uuid NOT NULL REFERENCES tutor_profiles(user_id),
-                         amount_minor bigint NOT NULL,
-                         currency char(3) NOT NULL,
-                         method text NOT NULL,
-                         destination jsonb NOT NULL,
-                         status text NOT NULL CHECK (status IN ('requested','approved','processing','paid','failed','cancelled')),
-                         requested_by uuid NOT NULL REFERENCES users(id),
-                         approved_by uuid REFERENCES users(id),
-                         provider_payload jsonb NOT NULL DEFAULT '{}'::jsonb,
-                         idempotency_key text UNIQUE,
+                         rating int NOT NULL CHECK (rating BETWEEN 1 AND 5),
+                         comment text,
+                         created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE reports (
+                         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                         reporter_id uuid NOT NULL REFERENCES users(id),
+                         target_type text NOT NULL CHECK (target_type IN ('user','lesson','message')),
+                         target_id uuid NOT NULL,
+                         reason text NOT NULL,
+                         status text NOT NULL DEFAULT 'open' CHECK (status IN ('open','in_review','resolved','rejected')),
                          created_at timestamptz NOT NULL DEFAULT now(),
                          updated_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS payouts_tutor_created_idx ON payouts (tutor_id, created_at DESC);
+
+CREATE TABLE cancellation_policies (
+                                       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                                       name text NOT NULL,
+                                       rules jsonb NOT NULL
+);
+
+CREATE TABLE cancellations (
+                               id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                               lesson_id uuid UNIQUE REFERENCES lessons(id),
+                               requested_by uuid NOT NULL REFERENCES users(id),
+                               reason text,
+                               policy_id uuid REFERENCES cancellation_policies(id),
+                               outcome jsonb,
+                               created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE refunds (
+                         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                         payment_id uuid NOT NULL REFERENCES payments(id),
+                         amount_minor bigint NOT NULL,
+                         currency char(3) NOT NULL,
+                         status text NOT NULL CHECK (status IN ('pending','succeeded','failed')),
+                         provider_payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+                         created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE notifications (
+                               id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                               user_id uuid NOT NULL REFERENCES users(id),
+                               channel text NOT NULL CHECK (channel IN ('email','sms','push','inapp')),
+                               template_key text NOT NULL,
+                               payload jsonb NOT NULL,
+                               status text NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','sent','failed')),
+                               created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE feature_flags (
+                               key text PRIMARY KEY,
+                               enabled boolean NOT NULL DEFAULT false,
+                               rules jsonb NOT NULL DEFAULT '{}'::jsonb,
+                               updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE outbox_events (
+                               id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                               aggregate text NOT NULL,
+                               aggregate_id uuid NOT NULL,
+                               event_type text NOT NULL,
+                               payload jsonb NOT NULL,
+                               status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','sent','failed')),
+                               created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS outbox_status_created_idx ON outbox_events (status, created_at);
+
+CREATE TABLE audit_log (
+                           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                           actor_id uuid REFERENCES users(id),
+                           entity_type text NOT NULL,
+                           entity_id uuid NOT NULL,
+                           action text NOT NULL,
+                           before jsonb,
+                           after jsonb,
+                           created_at timestamptz NOT NULL DEFAULT now()
+);
