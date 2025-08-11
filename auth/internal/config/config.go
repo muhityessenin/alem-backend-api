@@ -55,7 +55,6 @@ func MustLoad() Config {
 	// App
 	c.App.Name = getEnv("APP_NAME", "auth")
 	c.App.Env = getEnv("APP_ENV", "dev")
-	c.App.Host = getEnv("HOST", "0.0.0.0")
 	c.App.Port = getEnvInt("PORT", 8080)
 	c.App.ReadTimeout = getEnvDur("HTTP_READ_TIMEOUT", "10s")
 	c.App.WriteTimeout = getEnvDur("HTTP_WRITE_TIMEOUT", "15s")
