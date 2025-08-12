@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -45,25 +46,60 @@ func (h *TutorHandler) RegisterRoutes(r *mux.Router) {
 	pr.HandleFunc("/complete", h.complete).Methods("POST")
 }
 
-// ---------- middleware ----------
 func (h *TutorHandler) jwt() mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			hdr := r.Header.Get("Authorization")
-			if hdr == "" {
+			authHeader := r.Header.Get("Authorization")
+			ip := r.Header.Get("X-Forwarded-For")
+			if ip == "" {
+				ip = r.RemoteAddr
+			}
+			ua := r.Header.Get("User-Agent")
+
+			// Базовый лог запроса
+			// (не логируем сам токен по безопасности)
+			log.Printf("[JWT] path=%s ip=%s ua=%q authHeaderPresent=%t",
+				r.URL.Path, ip, ua, authHeader != "")
+
+			if authHeader == "" {
+				log.Printf("[JWT] missing Authorization header")
 				writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing Authorization")
 				return
 			}
-			parts := strings.Split(hdr, " ")
+			parts := strings.Split(authHeader, " ")
 			if len(parts) != 2 || parts[0] != "Bearer" {
+				log.Printf("[JWT] invalid Authorization format: %q", authHeader)
 				writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid Authorization")
 				return
 			}
-			claims, err := h.tokenUC.ParseToken(r.Context(), parts[1])
+
+			tokenString := parts[1]
+			claims, err := h.tokenUC.ParseToken(r.Context(), tokenString)
 			if err != nil {
+				// Детализируем причину
+				if usecase.IsTokenExpired(err) {
+					log.Printf("[JWT] token expired: %v", err)
+					writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "token expired")
+					return
+				}
+				if usecase.IsTokenSignatureInvalid(err) {
+					log.Printf("[JWT] signature invalid: %v", err)
+					writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid signature")
+					return
+				}
+				if usecase.IsTokenMalformed(err) {
+					log.Printf("[JWT] token malformed: %v", err)
+					writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "malformed token")
+					return
+				}
+				log.Printf("[JWT] parse token error: %v", err)
 				writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid token")
 				return
 			}
+
+			// Успех — логируем полезные клеймы (без токена)
+			log.Printf("[JWT] ok user_id=%s role=%s", claims.UserID, claims.Role)
+
 			ctx := context.WithValue(r.Context(), userIDKey, claims.UserID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -101,11 +137,16 @@ type videoDTO struct {
 func (h *TutorHandler) upsertAbout(w http.ResponseWriter, r *http.Request) {
 	var req aboutDTO
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("[about] decode error: %v", err)
 		writeErr(w, http.StatusBadRequest, "INVALID_BODY", "bad json")
 		return
 	}
-	uid := r.Context().Value(userIDKey).(string)
+	uid, _ := r.Context().Value(userIDKey).(string)
+	log.Printf("[about] user=%s first=%q last=%q phone=%q langs=%d",
+		uid, req.FirstName, req.LastName, req.Phone, len(req.Languages))
+
 	if err := h.tutorUC.UpsertAbout(r.Context(), uid, req.FirstName, req.LastName, req.Phone, req.Gender, req.AvatarURL, req.Languages); err != nil {
+		log.Printf("[about] upsert error user=%s: %v", uid, err)
 		writeErr(w, http.StatusInternalServerError, "UPsertAbout_FAILED", err.Error())
 		return
 	}
