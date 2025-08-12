@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"tutor/internal/delivery/httpapi"
+	"tutor/internal/delivery/http"
 	"tutor/internal/repository"
 	"tutor/internal/usecase"
 
