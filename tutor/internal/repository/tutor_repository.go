@@ -121,9 +121,15 @@ func (r *tutorRepository) ReplaceWeeklyAvailability(ctx context.Context, userID,
 	// сохранить TZ в props
 	if _, err := tx.Exec(ctx, `
 UPDATE public.tutor_profiles
-SET props = COALESCE(props,'{}'::jsonb) || jsonb_build_object('timezone', $2),
+SET props = jsonb_set(
+              COALESCE(props,'{}'::jsonb),
+              '{timezone}',
+              to_jsonb($2::text),  -- ВАЖНО: явное приведение к text + to_jsonb
+              true
+            ),
     updated_at = now()
-WHERE user_id = $1`, userID, timezone); err != nil {
+WHERE user_id = $1
+`, userID, timezone); err != nil {
 		return err
 	}
 
