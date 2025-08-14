@@ -45,13 +45,14 @@ type tokenResponse struct {
 }
 
 func (h *AuthHandler) RegisterRoutes(router *mux.Router) {
-	router.HandleFunc("/api/auth/register", h.register).Methods("POST")
-	router.HandleFunc("/api/auth/login", h.login).Methods("POST")
-	router.HandleFunc("/api/auth/refresh", h.refresh).Methods("POST")
-	router.HandleFunc("/api/auth/otp/send", h.sendOTP).Methods("POST")
-	router.HandleFunc("/api/auth/otp/verify", h.verifyOTP).Methods("POST")
+	router.PathPrefix("/api/v1/auth")
+	router.HandleFunc("/register", h.register).Methods("POST")
+	router.HandleFunc("/login", h.login).Methods("POST")
+	router.HandleFunc("/refresh", h.refresh).Methods("POST")
+	router.HandleFunc("/otp/send", h.sendOTP).Methods("POST")
+	router.HandleFunc("/otp/verify", h.verifyOTP).Methods("POST")
 
-	protected := router.PathPrefix("/api/auth").Subrouter()
+	protected := router.PathPrefix("/").Subrouter()
 	protected.Use(h.JWTMiddleware)
 	protected.HandleFunc("/logout", h.logout).Methods("POST")
 	protected.HandleFunc("/logout-all", h.logoutAll).Methods("POST")
