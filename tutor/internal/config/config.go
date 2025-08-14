@@ -43,7 +43,7 @@ func MustLoad() Config {
 	c.DB.URL = must("DB_URL")
 	c.DB.MaxConns = int32(envInt("DB_MAX_CONNS", 20))
 
-	c.JWT.AccessSecret = must("JWT_SECRET")
+	c.JWT.AccessSecret = must("JWT_ACCESS_SECRET")
 
 	c.CORS.AllowedOrigins = envList("CORS_ALLOWED_ORIGINS", "*")
 	c.CORS.AllowedMethods = envList("CORS_ALLOWED_METHODS", "GET,POST,PUT,DELETE,OPTIONS")
