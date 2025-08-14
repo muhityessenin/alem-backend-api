@@ -86,12 +86,24 @@ WHERE user_id = $1
 		return err
 	}
 	for _, l := range langs {
-		// если нет записи в languages(code) — можно вставить справочник заранее/миграциями
+		code := strings.ToLower(strings.TrimSpace(l.Code))
+
+		// гарантируем, что код есть в справочнике (на случай пустого seeds)
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO public.languages(code, name)
+         VALUES ($1,$2) ON CONFLICT (code) DO NOTHING`,
+			code, code,
+		); err != nil {
+			return fmt.Errorf("seed languages: %w", err)
+		}
+
+		prof := normalizeProficiency(l.Proficiency)
+
 		if _, err := tx.Exec(ctx, `
 INSERT INTO public.tutor_languages (tutor_id, lang_code, proficiency)
 VALUES ($1,$2,$3)
 ON CONFLICT (tutor_id, lang_code) DO UPDATE SET proficiency = EXCLUDED.proficiency`,
-			userID, strings.ToLower(l.Code), strings.ToUpper(l.Proficiency)); err != nil {
+			userID, code, prof); err != nil {
 			return fmt.Errorf("upsert tutor_languages: %w", err)
 		}
 	}
@@ -388,4 +400,21 @@ func ensureNestedMap(m map[string]interface{}, key string) map[string]interface{
 		m[key] = map[string]interface{}{}
 	}
 	return m[key].(map[string]interface{})
+}
+
+func normalizeProficiency(p string) string {
+	s := strings.TrimSpace(p)
+	if s == "" {
+		return "A1"
+	}
+	up := strings.ToUpper(s)
+	if up == "NATIVE" {
+		return "native"
+	}
+	switch up {
+	case "A1", "A2", "B1", "B2", "C1", "C2":
+		return up
+	default:
+		return "A1"
+	}
 }
