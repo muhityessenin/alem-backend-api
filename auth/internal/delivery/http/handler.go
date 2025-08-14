@@ -44,18 +44,22 @@ type tokenResponse struct {
 	RefreshToken string `json:"refreshToken"`
 }
 
-func (h *AuthHandler) RegisterRoutes(router *mux.Router) {
-	router.PathPrefix("/api/v1/auth").Subrouter()
-	router.HandleFunc("/register", h.register).Methods("POST")
-	router.HandleFunc("/login", h.login).Methods("POST")
-	router.HandleFunc("/refresh", h.refresh).Methods("POST")
-	router.HandleFunc("/otp/send", h.sendOTP).Methods("POST")
-	router.HandleFunc("/otp/verify", h.verifyOTP).Methods("POST")
+func (h *AuthHandler) RegisterRoutes(r *mux.Router) {
+	// Базовый префикс для всего auth
+	api := r.PathPrefix("/api/v1/auth").Subrouter()
 
-	protected := router.PathPrefix("").Subrouter()
+	// Публичные
+	api.HandleFunc("/register", h.register).Methods(http.MethodPost)
+	api.HandleFunc("/login", h.login).Methods(http.MethodPost)
+	api.HandleFunc("/refresh", h.refresh).Methods(http.MethodPost)
+	api.HandleFunc("/otp/send", h.sendOTP).Methods(http.MethodPost)
+	api.HandleFunc("/otp/verify", h.verifyOTP).Methods(http.MethodPost)
+
+	// Защищённые под тем же префиксом
+	protected := api.PathPrefix("").Subrouter()
 	protected.Use(h.JWTMiddleware)
-	protected.HandleFunc("/logout", h.logout).Methods("POST")
-	protected.HandleFunc("/logout-all", h.logoutAll).Methods("POST")
+	protected.HandleFunc("/logout", h.logout).Methods(http.MethodPost)
+	protected.HandleFunc("/logout-all", h.logoutAll).Methods(http.MethodPost)
 }
 
 func (h *AuthHandler) register(w http.ResponseWriter, r *http.Request) {

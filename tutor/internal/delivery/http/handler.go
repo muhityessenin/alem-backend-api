@@ -31,7 +31,7 @@ func NewTutorHandler(t usecase.TutorUseCase, tok usecase.TokenUseCase) *TutorHan
 }
 
 func (h *TutorHandler) RegisterRoutes(r *mux.Router) {
-	// public
+
 	r.HandleFunc("/v1/tutors", h.listTutors).Methods("GET")
 	r.HandleFunc("/v1/tutors/{id}", h.tutorDetails).Methods("GET")
 
