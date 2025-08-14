@@ -65,11 +65,19 @@ ON CONFLICT (user_id) DO UPDATE SET updated_at = now()`, userID); err != nil {
 	}
 
 	// props: gender, avatar_url
+	// props: gender, avatar_url
 	if _, err := tx.Exec(ctx, `
 UPDATE public.tutor_profiles
-SET props = COALESCE(props,'{}'::jsonb) || jsonb_build_object('gender', $2, 'avatar_url', $3),
+SET props = jsonb_strip_nulls(
+             COALESCE(props,'{}'::jsonb) ||
+             jsonb_build_object(
+               'gender',     to_jsonb($2::text),
+               'avatar_url', to_jsonb($3::text)
+             )
+           ),
     updated_at = now()
-WHERE user_id = $1`, userID, nullIfEmpty(gender), nullIfEmpty(avatarURL)); err != nil {
+WHERE user_id = $1
+`, userID, nullIfEmpty(gender), nullIfEmpty(avatarURL)); err != nil {
 		return fmt.Errorf("update props (about): %w", err)
 	}
 
