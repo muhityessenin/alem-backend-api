@@ -65,19 +65,19 @@ func (h *AuthHandler) RegisterAdminRoutes(r *mux.Router) {
 	protected.Use(h.adminOnly())
 
 	// languages (POST — только админ)
-	protected.HandleFunc("/languages", h.adminCreateLanguage).Methods(http.MethodPost)
+	protected.HandleFunc("/languages", h.adminCreateLanguage).Methods(http.MethodPost, http.MethodOptions)
 
 	// subjects (POST — только админ)
-	protected.HandleFunc("/subjects", h.adminCreateSubject).Methods(http.MethodPost)
+	protected.HandleFunc("/subjects", h.adminCreateSubject).Methods(http.MethodPost, http.MethodOptions)
 
 	// directions / subdirections (POST — только админ)
-	protected.HandleFunc("/directions", h.adminCreateDirection).Methods(http.MethodPost)
-	protected.HandleFunc("/subdirections", h.adminCreateSubdirection).Methods(http.MethodPost)
+	protected.HandleFunc("/directions", h.adminCreateDirection).Methods(http.MethodPost, http.MethodOptions)
+	protected.HandleFunc("/subdirections", h.adminCreateSubdirection).Methods(http.MethodPost, http.MethodOptions)
 
 	// tutor <-> taxonomy bindings (POST — только админ)
-	protected.HandleFunc("/tutors/{tutorID}/subjects", h.adminUpsertTutorSubject).Methods(http.MethodPost)
-	protected.HandleFunc("/tutors/{tutorID}/languages", h.adminUpsertTutorLanguage).Methods(http.MethodPost)
-	protected.HandleFunc("/tutors/{tutorID}/subdirections", h.adminUpsertTutorSubdirection).Methods(http.MethodPost)
+	protected.HandleFunc("/tutors/{tutorID}/subjects", h.adminUpsertTutorSubject).Methods(http.MethodPost, http.MethodOptions)
+	protected.HandleFunc("/tutors/{tutorID}/languages", h.adminUpsertTutorLanguage).Methods(http.MethodPost, http.MethodOptions)
+	protected.HandleFunc("/tutors/{tutorID}/subdirections", h.adminUpsertTutorSubdirection).Methods(http.MethodPost, http.MethodOptions)
 }
 
 // ------------ DTOs ------------
