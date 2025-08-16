@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"strings"
 	"time"
 
@@ -194,7 +195,7 @@ ON CONFLICT (slug) DO UPDATE SET direction_id = EXCLUDED.direction_id, name = EX
 }
 
 func (r *adminRepo) ListSubdirections(ctx context.Context, directionSlug string) ([]Subdirection, error) {
-	var rows pgxpool.Rows
+	var rows pgx.Rows
 	var err error
 	if strings.TrimSpace(directionSlug) == "" {
 		rows, err = r.db.Query(ctx, `SELECT id, direction_id, slug, name, created_at FROM subdirections ORDER BY created_at DESC`)
