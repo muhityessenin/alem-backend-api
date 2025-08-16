@@ -12,9 +12,12 @@ import (
 
 type AuthHandler struct {
 	useCase usecase.AuthUseCase
+	adminUC usecase.AdminUseCase
 }
 
-func NewAuthHandler(uc usecase.AuthUseCase) *AuthHandler { return &AuthHandler{useCase: uc} }
+func NewAuthHandler(uc usecase.AuthUseCase, adminUC usecase.AdminUseCase) *AuthHandler {
+	return &AuthHandler{useCase: uc, adminUC: adminUC}
+}
 
 type registerRequest struct {
 	FirstName string      `json:"firstName"`

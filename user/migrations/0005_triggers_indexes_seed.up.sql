@@ -25,7 +25,7 @@ INSERT INTO subjects(slug,name) VALUES
                                     ('english', '{"ru":"Английский","en":"English"}'),
                                     ('math',    '{"ru":"Математика","en":"Mathematics"}'),
                                     ('kazakh',  '{"ru":"Казахский","en":"Kazakh"}')
-    ON CONFLICT DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 -- полезные индексы
 CREATE INDEX IF NOT EXISTS lessons_scheduled_starts_idx ON lessons (started_at) WHERE status='scheduled';

@@ -23,33 +23,37 @@ import (
 func main() {
 	cfg := config.MustLoad()
 
-	// DB pool
+	// --- DB pool ---
 	pgxCfg, err := pgxpool.ParseConfig(cfg.DB.URL)
 	if err != nil {
 		log.Fatalf("parse db url: %v", err)
 	}
+	// Если эти поля есть в твоём Config — оставь; если нет, удали строки.
 	pgxCfg.MaxConns = cfg.DB.MaxConns
 	pgxCfg.MinConns = cfg.DB.MinConns
 	pgxCfg.MaxConnLifetime = cfg.DB.MaxConnLifetime
 	pgxCfg.MaxConnIdleTime = cfg.DB.MaxConnIdleTime
 
-	dbctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	dbpool, err := pgxpool.NewWithConfig(dbctx, pgxCfg)
+
+	dbpool, err := pgxpool.NewWithConfig(ctx, pgxCfg)
 	if err != nil {
 		log.Fatalf("connect db: %v", err)
 	}
 	defer dbpool.Close()
 
-	// ...
+	// --- repos ---
 	userRepo := repository.NewUserPostgresRepo(dbpool)
 	sessRepo := repository.NewSessionsRepo(dbpool)
 	otpRepo := repository.NewOTPRepo(dbpool)
 
+	// репозиторий для админки (таксономия/связки)
+	adminRepo := repository.NewAdminRepository(dbpool) // <- подставь свой конструктор, если название другое
+
+	// --- usecases ---
 	authUC := usecase.NewAuthUseCase(
-		userRepo,
-		sessRepo,
-		otpRepo,
+		userRepo, sessRepo, otpRepo,
 		usecase.Config{
 			AccessSecret:   cfg.JWT.AccessSecret,
 			RefreshSecret:  cfg.JWT.RefreshSecret,
@@ -64,10 +68,14 @@ func main() {
 		},
 	)
 
-	// http
+	adminUC := usecase.NewAdminUseCase(adminRepo)
+
+	// --- http ---
 	router := mux.NewRouter()
-	authHandler := delivery.NewAuthHandler(authUC)
-	authHandler.RegisterRoutes(router)
+
+	h := delivery.NewAuthHandler(authUC, adminUC)
+	h.RegisterRoutes(router)      // /api/v1/auth/...
+	h.RegisterAdminRoutes(router) // /api/v1/admin/...
 
 	cors := handlers.CORS(
 		handlers.AllowedOrigins(cfg.CORS.AllowedOrigins),
@@ -83,7 +91,7 @@ func main() {
 		IdleTimeout:  cfg.App.IdleTimeout,
 	}
 
-	// graceful shutdown
+	// --- graceful shutdown ---
 	errCh := make(chan error, 1)
 	go func() {
 		log.Printf("%s starting on %s", cfg.App.Name, srv.Addr)
