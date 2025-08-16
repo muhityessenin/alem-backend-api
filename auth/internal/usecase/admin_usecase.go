@@ -1,4 +1,3 @@
-// auth/internal/usecase/admin_usecase.go
 package usecase
 
 import (
@@ -7,7 +6,6 @@ import (
 )
 
 type AdminUseCase interface {
-	// taxonomies
 	CreateLanguage(ctx context.Context, code, name string) error
 	ListLanguages(ctx context.Context) ([]repository.Language, error)
 
@@ -20,7 +18,6 @@ type AdminUseCase interface {
 	CreateSubdirection(ctx context.Context, directionID, directionSlug, slug string, name map[string]any) error
 	ListSubdirections(ctx context.Context, directionSlug string) ([]repository.Subdirection, error)
 
-	// tutor bindings
 	UpsertTutorSubject(ctx context.Context, tutorID, subjectID, subjectSlug, level string, price int64, currency string) error
 	ListTutorSubjects(ctx context.Context, tutorID string) ([]repository.TutorSubjectView, error)
 

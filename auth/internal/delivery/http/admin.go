@@ -40,37 +40,44 @@ func (h *AuthHandler) adminOnly() mux.MiddlewareFunc {
 }
 
 // ------------ роутер (добавка к твоим RegisterRoutes) ------------
+// auth/internal/delivery/http/admin.go
 func (h *AuthHandler) RegisterAdminRoutes(r *mux.Router) {
-	// ... твои публичные/защищённые /api/v1/auth/* как и раньше ...
+	// Публичные GET под тем же префиксом
+	public := r.PathPrefix("/api/v1/admin").Subrouter()
 
-	// Админ-префикс
-	admin := r.PathPrefix("/api/v1/admin").Subrouter()
-	admin.Use(h.adminOnly())
+	// languages (GET — публично)
+	public.HandleFunc("/languages", h.adminListLanguages).Methods(http.MethodGet)
 
-	// languages
-	admin.HandleFunc("/languages", h.adminCreateLanguage).Methods(http.MethodPost)
-	admin.HandleFunc("/languages", h.adminListLanguages).Methods(http.MethodGet)
+	// subjects (GET — публично)
+	public.HandleFunc("/subjects", h.adminListSubjects).Methods(http.MethodGet)
 
-	// subjects
-	admin.HandleFunc("/subjects", h.adminCreateSubject).Methods(http.MethodPost)
-	admin.HandleFunc("/subjects", h.adminListSubjects).Methods(http.MethodGet)
+	// directions / subdirections (GET — публично)
+	public.HandleFunc("/directions", h.adminListDirections).Methods(http.MethodGet)
+	public.HandleFunc("/subdirections", h.adminListSubdirections).Methods(http.MethodGet)
 
-	// directions / subdirections
-	admin.HandleFunc("/directions", h.adminCreateDirection).Methods(http.MethodPost)
-	admin.HandleFunc("/directions", h.adminListDirections).Methods(http.MethodGet)
+	// tutor <-> taxonomy bindings (GET — публично)
+	public.HandleFunc("/tutors/{tutorID}/subjects", h.adminListTutorSubjects).Methods(http.MethodGet)
+	public.HandleFunc("/tutors/{tutorID}/languages", h.adminListTutorLanguages).Methods(http.MethodGet)
+	public.HandleFunc("/tutors/{tutorID}/subdirections", h.adminListTutorSubdirections).Methods(http.MethodGet)
 
-	admin.HandleFunc("/subdirections", h.adminCreateSubdirection).Methods(http.MethodPost)
-	admin.HandleFunc("/subdirections", h.adminListSubdirections).Methods(http.MethodGet)
+	// Защищённые POST — только для админа
+	protected := r.PathPrefix("/api/v1/admin").Subrouter()
+	protected.Use(h.adminOnly())
 
-	// tutor <-> taxonomy bindings
-	admin.HandleFunc("/tutors/{tutorID}/subjects", h.adminUpsertTutorSubject).Methods(http.MethodPost)
-	admin.HandleFunc("/tutors/{tutorID}/subjects", h.adminListTutorSubjects).Methods(http.MethodGet)
+	// languages (POST — только админ)
+	protected.HandleFunc("/languages", h.adminCreateLanguage).Methods(http.MethodPost)
 
-	admin.HandleFunc("/tutors/{tutorID}/languages", h.adminUpsertTutorLanguage).Methods(http.MethodPost)
-	admin.HandleFunc("/tutors/{tutorID}/languages", h.adminListTutorLanguages).Methods(http.MethodGet)
+	// subjects (POST — только админ)
+	protected.HandleFunc("/subjects", h.adminCreateSubject).Methods(http.MethodPost)
 
-	admin.HandleFunc("/tutors/{tutorID}/subdirections", h.adminUpsertTutorSubdirection).Methods(http.MethodPost)
-	admin.HandleFunc("/tutors/{tutorID}/subdirections", h.adminListTutorSubdirections).Methods(http.MethodGet)
+	// directions / subdirections (POST — только админ)
+	protected.HandleFunc("/directions", h.adminCreateDirection).Methods(http.MethodPost)
+	protected.HandleFunc("/subdirections", h.adminCreateSubdirection).Methods(http.MethodPost)
+
+	// tutor <-> taxonomy bindings (POST — только админ)
+	protected.HandleFunc("/tutors/{tutorID}/subjects", h.adminUpsertTutorSubject).Methods(http.MethodPost)
+	protected.HandleFunc("/tutors/{tutorID}/languages", h.adminUpsertTutorLanguage).Methods(http.MethodPost)
+	protected.HandleFunc("/tutors/{tutorID}/subdirections", h.adminUpsertTutorSubdirection).Methods(http.MethodPost)
 }
 
 // ------------ DTOs ------------
