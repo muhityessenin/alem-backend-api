@@ -26,6 +26,9 @@ type AdminUseCase interface {
 
 	UpsertTutorSubdirection(ctx context.Context, tutorID, subdirID, subdirSlug, level string, price int64, currency string) error
 	ListTutorSubdirections(ctx context.Context, tutorID string) ([]repository.TutorSubdirectionView, error)
+
+	CreateUniversity(ctx context.Context, slug string, name map[string]any, country, city string) error
+	ListUniversities(ctx context.Context, country, q string) ([]repository.University, error)
 }
 
 type adminUseCase struct{ repo repository.AdminRepository }
@@ -79,4 +82,11 @@ func (uc *adminUseCase) UpsertTutorSubdirection(ctx context.Context, tutorID, su
 }
 func (uc *adminUseCase) ListTutorSubdirections(ctx context.Context, tutorID string) ([]repository.TutorSubdirectionView, error) {
 	return uc.repo.ListTutorSubdirections(ctx, tutorID)
+}
+
+func (uc *adminUseCase) CreateUniversity(ctx context.Context, slug string, name map[string]any, country, city string) error {
+	return uc.repo.CreateUniversity(ctx, slug, name, country, city)
+}
+func (uc *adminUseCase) ListUniversities(ctx context.Context, country, q string) ([]repository.University, error) {
+	return uc.repo.ListUniversities(ctx, country, q)
 }

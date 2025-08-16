@@ -38,6 +38,14 @@ type Subdirection struct {
 	Name        map[string]any `json:"name"`
 	CreatedAt   time.Time      `json:"createdAt"`
 }
+type University struct {
+	ID          string         `json:"id"`
+	Slug        string         `json:"slug"`
+	Name        map[string]any `json:"name"`
+	CountryCode string         `json:"countryCode,omitempty"`
+	City        string         `json:"city,omitempty"`
+	CreatedAt   time.Time      `json:"createdAt"`
+}
 
 type TutorSubjectView struct {
 	SubjectID  string `json:"subjectId"`
@@ -84,6 +92,8 @@ type AdminRepository interface {
 
 	UpsertTutorSubdirection(ctx context.Context, tutorID, subdirID, subdirSlug, level string, price int64, currency string) error
 	ListTutorSubdirections(ctx context.Context, tutorID string) ([]TutorSubdirectionView, error)
+	CreateUniversity(ctx context.Context, slug string, name map[string]any, countryCode, city string) error
+	ListUniversities(ctx context.Context, country, q string) ([]University, error)
 }
 
 type adminRepo struct{ db *pgxpool.Pool }
@@ -343,6 +353,66 @@ ORDER BY sd.slug`, tutorID)
 			return nil, err
 		}
 		out = append(out, v)
+	}
+	return out, nil
+}
+
+// ---------------- universities ----------------
+
+func (r *adminRepo) CreateUniversity(ctx context.Context, slug string, name map[string]any, countryCode, city string) error {
+	slug = strings.ToLower(strings.TrimSpace(slug))
+	if slug == "" || len(name) == 0 {
+		return fmt.Errorf("slug and name are required")
+	}
+	b, _ := json.Marshal(name)
+	_, err := r.db.Exec(ctx, `
+INSERT INTO universities (slug, name, country_code, city)
+VALUES ($1, $2::jsonb, NULLIF($3,''), NULLIF($4,''))
+ON CONFLICT (slug) DO UPDATE SET
+  name = EXCLUDED.name,
+  country_code = EXCLUDED.country_code,
+  city = EXCLUDED.city
+`, slug, string(b), strings.TrimSpace(countryCode), strings.TrimSpace(city))
+	return err
+}
+
+func (r *adminRepo) ListUniversities(ctx context.Context, country, q string) ([]University, error) {
+	base := `
+SELECT id, slug, name, COALESCE(country_code,''), COALESCE(city,''), created_at
+FROM universities
+WHERE 1=1`
+	args := []any{}
+	i := 1
+
+	if strings.TrimSpace(country) != "" {
+		base += fmt.Sprintf(" AND lower(country_code) = $%d", i)
+		args = append(args, strings.ToLower(strings.TrimSpace(country)))
+		i++
+	}
+	if strings.TrimSpace(q) != "" {
+		like := "%" + strings.TrimSpace(q) + "%"
+		base += fmt.Sprintf(" AND (slug ILIKE $%d OR city ILIKE $%d OR name::text ILIKE $%d)", i, i, i)
+		args = append(args, like)
+		i++
+	}
+
+	base += " ORDER BY created_at DESC LIMIT 500"
+
+	rows, err := r.db.Query(ctx, base, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []University
+	for rows.Next() {
+		var u University
+		var jb []byte
+		if err := rows.Scan(&u.ID, &u.Slug, &jb, &u.CountryCode, &u.City, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(jb, &u.Name)
+		out = append(out, u)
 	}
 	return out, nil
 }

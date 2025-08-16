@@ -54,6 +54,7 @@ func (h *AuthHandler) RegisterAdminRoutes(r *mux.Router) {
 	// directions / subdirections (GET — публично)
 	public.HandleFunc("/directions", h.adminListDirections).Methods(http.MethodGet)
 	public.HandleFunc("/subdirections", h.adminListSubdirections).Methods(http.MethodGet)
+	public.HandleFunc("/universities", h.adminListUniversities).Methods(http.MethodGet)
 
 	// tutor <-> taxonomy bindings (GET — публично)
 	public.HandleFunc("/tutors/{tutorID}/subjects", h.adminListTutorSubjects).Methods(http.MethodGet)
@@ -73,15 +74,45 @@ func (h *AuthHandler) RegisterAdminRoutes(r *mux.Router) {
 	// directions / subdirections (POST — только админ)
 	protected.HandleFunc("/directions", h.adminCreateDirection).Methods(http.MethodPost, http.MethodOptions)
 	protected.HandleFunc("/subdirections", h.adminCreateSubdirection).Methods(http.MethodPost, http.MethodOptions)
+	protected.HandleFunc("/universities", h.adminCreateUniversity).Methods(http.MethodPost, http.MethodOptions)
 
 	// tutor <-> taxonomy bindings (POST — только админ)
 	protected.HandleFunc("/tutors/{tutorID}/subjects", h.adminUpsertTutorSubject).Methods(http.MethodPost, http.MethodOptions)
 	protected.HandleFunc("/tutors/{tutorID}/languages", h.adminUpsertTutorLanguage).Methods(http.MethodPost, http.MethodOptions)
 	protected.HandleFunc("/tutors/{tutorID}/subdirections", h.adminUpsertTutorSubdirection).Methods(http.MethodPost, http.MethodOptions)
 }
+func (h *AuthHandler) adminCreateUniversity(w http.ResponseWriter, r *http.Request) {
+	var req universityDTO
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Slug) == "" || len(req.Name) == 0 {
+		writeErr(w, http.StatusBadRequest, "INVALID_BODY", "slug and name are required")
+		return
+	}
+	if err := h.adminUC.CreateUniversity(r.Context(), req.Slug, req.Name, req.CountryCode, req.City); err != nil {
+		writeErr(w, http.StatusConflict, "CREATE_FAILED", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"success": true})
+}
+
+func (h *AuthHandler) adminListUniversities(w http.ResponseWriter, r *http.Request) {
+	country := r.URL.Query().Get("country")
+	q := r.URL.Query().Get("q")
+	items, err := h.adminUC.ListUniversities(r.Context(), country, q)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "LIST_FAILED", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": items})
+}
 
 // ------------ DTOs ------------
 type kvMap = map[string]string
+type universityDTO struct {
+	Slug        string         `json:"slug"`
+	Name        map[string]any `json:"name"`
+	CountryCode string         `json:"countryCode,omitempty"`
+	City        string         `json:"city,omitempty"`
+}
 
 type languageDTO struct {
 	Code string `json:"code"`
